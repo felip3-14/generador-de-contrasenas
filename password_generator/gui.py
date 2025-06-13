@@ -12,6 +12,9 @@ class PasswordGeneratorGUI:
         self.root = root
         self.security = SecurityManager()
         self.root.withdraw()  # Oculta la ventana principal
+        self.blocked = False
+        self.blocked_until = None
+        self.block_window = None
 
         # Pedir clave pública al inicio
         self.public_key_value = None
@@ -125,6 +128,10 @@ class PasswordGeneratorGUI:
         # Binding de doble click
         self.password_list.bind("<Double-1>", self.on_password_double_click)
 
+        # Botón de configuración
+        config_btn = ttk.Button(self.root, text="Configuración", command=self.open_config_window)
+        config_btn.pack(pady=10)
+
     def get_special_chars(self):
         return ''.join(char for char, var in self.special_chars.items() if var.get())
 
@@ -206,6 +213,9 @@ class PasswordGeneratorGUI:
             ))
 
     def on_password_double_click(self, event):
+        if self.blocked:
+            self.show_block_window()
+            return
         selected_item = self.password_list.focus()
         if not selected_item:
             return
@@ -232,4 +242,123 @@ class PasswordGeneratorGUI:
             return
         # Mostrar toda la info
         info = f"Plataforma: {entry.platform}\nUsuario: {entry.username}\nContraseña: {entry.password}\nFecha de creación: {entry.date_created.strftime('%Y-%m-%d %H:%M')}\nÚltima modificación: {entry.last_modified.strftime('%Y-%m-%d %H:%M') if entry.last_modified else '-'}"
-        messagebox.showinfo("Detalles de la contraseña", info) 
+        messagebox.showinfo("Detalles de la contraseña", info)
+
+    def open_config_window(self):
+        if self.blocked:
+            self.show_block_window()
+            return
+        config_win = tk.Toplevel(self.root)
+        config_win.title("Configuración de claves")
+        config_win.geometry("400x400")
+        config_win.grab_set()
+
+        ttk.Label(config_win, text="Clave pública actual:").pack(pady=2)
+        old_public = ttk.Entry(config_win, show="*")
+        old_public.pack(pady=2)
+        ttk.Label(config_win, text="Clave privada actual:").pack(pady=2)
+        old_private = ttk.Entry(config_win, show="*")
+        old_private.pack(pady=2)
+        ttk.Label(config_win, text="Nueva clave pública:").pack(pady=2)
+        new_public = ttk.Entry(config_win, show="*")
+        new_public.pack(pady=2)
+        ttk.Label(config_win, text="Confirmar nueva clave pública:").pack(pady=2)
+        confirm_public = ttk.Entry(config_win, show="*")
+        confirm_public.pack(pady=2)
+        ttk.Label(config_win, text="Nueva clave privada:").pack(pady=2)
+        new_private = ttk.Entry(config_win, show="*")
+        new_private.pack(pady=2)
+        ttk.Label(config_win, text="Confirmar nueva clave privada:").pack(pady=2)
+        confirm_private = ttk.Entry(config_win, show="*")
+        confirm_private.pack(pady=2)
+
+        def try_change_keys():
+            op = old_public.get()
+            opr = old_private.get()
+            np = new_public.get()
+            cp = confirm_public.get()
+            npr = new_private.get()
+            cpr = confirm_private.get()
+            if np != cp or npr != cpr:
+                messagebox.showerror("Error", "Las nuevas claves y sus confirmaciones no coinciden.")
+                return
+            ok, msg = self.security.change_keys(op, opr, np, npr)
+            if ok:
+                messagebox.showinfo("Éxito", msg)
+                config_win.destroy()
+            else:
+                messagebox.showerror("Error", msg)
+                config_win.destroy()
+                self.block_app()
+
+        ttk.Button(config_win, text="Cambiar claves", command=try_change_keys).pack(pady=10)
+
+    def block_app(self):
+        self.blocked = True
+        self.blocked_until = time.time() + 15 * 60  # 15 minutos
+        self.show_block_window()
+        threading.Thread(target=self._block_timer_thread, daemon=True).start()
+
+    def show_block_window(self):
+        if self.block_window and tk.Toplevel.winfo_exists(self.block_window):
+            return
+        self.block_window = tk.Toplevel(self.root)
+        self.block_window.title("Bloqueado")
+        self.block_window.geometry("350x150")
+        self.block_window.grab_set()
+        self.block_window.protocol("WM_DELETE_WINDOW", lambda: None)  # No cerrar
+        label = ttk.Label(self.block_window, text="Demasiados intentos fallidos.\nEl programa está bloqueado.", font=("Arial", 12))
+        label.pack(pady=10)
+        self.timer_label = ttk.Label(self.block_window, text="", font=("Arial", 16))
+        self.timer_label.pack(pady=10)
+        self.update_block_timer()
+
+    def update_block_timer(self):
+        if not self.blocked_until:
+            return
+        remaining = int(self.blocked_until - time.time())
+        if remaining < 0:
+            remaining = 0
+        mins, secs = divmod(remaining, 60)
+        self.timer_label.config(text=f"Tiempo restante: {mins:02d}:{secs:02d}")
+        if remaining > 0:
+            self.root.after(1000, self.update_block_timer)
+        else:
+            self.unblock_app()
+
+    def _block_timer_thread(self):
+        while time.time() < self.blocked_until:
+            time.sleep(1)
+        self.root.after(0, self.unblock_app)
+
+    def unblock_app(self):
+        self.blocked = False
+        self.blocked_until = None
+        if self.block_window:
+            self.block_window.destroy()
+            self.block_window = None
+
+    def update_block_timer(self):
+        if not self.blocked_until:
+            return
+        remaining = int(self.blocked_until - time.time())
+        if remaining < 0:
+            remaining = 0
+        mins, secs = divmod(remaining, 60)
+        self.timer_label.config(text=f"Tiempo restante: {mins:02d}:{secs:02d}")
+        if remaining > 0:
+            self.root.after(1000, self.update_block_timer)
+        else:
+            self.unblock_app()
+
+    def _block_timer_thread(self):
+        while time.time() < self.blocked_until:
+            time.sleep(1)
+        self.root.after(0, self.unblock_app)
+
+    def unblock_app(self):
+        self.blocked = False
+        self.blocked_until = None
+        if self.block_window:
+            self.block_window.destroy()
+            self.block_window = None 
