@@ -223,26 +223,36 @@ class PasswordGeneratorGUI:
         if not values:
             return
         platform, username, date = values
-        # Pedir clave privada
-        key = simpledialog.askstring(
-            "Clave Privada",
-            "Introduce la clave privada para ver los detalles:",
-            show="*",
-            parent=self.root
-        )
-        if key is None:
-            return  # Usuario canceló
-        if not self.security.validate_private_key(key):
-            messagebox.showerror("Error", "Clave privada incorrecta.")
-            return
-        # Buscar la entrada completa
-        entry = next((e for e in self.storage.get_passwords() if e.platform == platform and e.username == username and e.date_created.strftime("%Y-%m-%d %H:%M") == date), None)
-        if not entry:
-            messagebox.showerror("Error", "No se encontró la entrada seleccionada.")
-            return
-        # Mostrar toda la info
-        info = f"Plataforma: {entry.platform}\nUsuario: {entry.username}\nContraseña: {entry.password}\nFecha de creación: {entry.date_created.strftime('%Y-%m-%d %H:%M')}\nÚltima modificación: {entry.last_modified.strftime('%Y-%m-%d %H:%M') if entry.last_modified else '-'}"
-        messagebox.showinfo("Detalles de la contraseña", info)
+        
+        # Pedir clave privada con 3 intentos
+        for intento in range(3):  # Permite 3 intentos
+            key = simpledialog.askstring(
+                "Clave Privada",
+                "Introduce la clave privada para ver los detalles:",
+                show="*",
+                parent=self.root
+            )
+            if key is None:
+                return  # Usuario canceló
+            if self.security.validate_private_key(key):
+                # Buscar la entrada completa
+                entry = next((e for e in self.storage.get_passwords() if e.platform == platform and e.username == username and e.date_created.strftime("%Y-%m-%d %H:%M") == date), None)
+                if not entry:
+                    messagebox.showerror("Error", "No se encontró la entrada seleccionada.")
+                    return
+                # Mostrar toda la info
+                info = f"Plataforma: {entry.platform}\nUsuario: {entry.username}\nContraseña: {entry.password}\nFecha de creación: {entry.date_created.strftime('%Y-%m-%d %H:%M')}\nÚltima modificación: {entry.last_modified.strftime('%Y-%m-%d %H:%M') if entry.last_modified else '-'}"
+                messagebox.showinfo("Detalles de la contraseña", info)
+                return
+            else:
+                intentos_restantes = 2 - intento
+                if intentos_restantes > 0:
+                    messagebox.showerror("Error", f"Clave privada incorrecta. Te quedan {intentos_restantes} intentos.")
+                else:
+                    messagebox.showerror("Error", "Clave privada incorrecta. Último intento.")
+        
+        # Si llegamos aquí, es porque se agotaron los intentos
+        self.block_app()
 
     def open_config_window(self):
         if self.blocked:
