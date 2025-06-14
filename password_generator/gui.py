@@ -249,49 +249,123 @@ class PasswordGeneratorGUI:
             self.show_block_window()
             return
         config_win = tk.Toplevel(self.root)
-        config_win.title("Configuración de claves")
-        config_win.geometry("400x400")
+        config_win.title("Configuración")
+        config_win.geometry("350x220")
         config_win.grab_set()
 
-        ttk.Label(config_win, text="Clave pública actual:").pack(pady=2)
-        old_public = ttk.Entry(config_win, show="*")
-        old_public.pack(pady=2)
-        ttk.Label(config_win, text="Clave privada actual:").pack(pady=2)
-        old_private = ttk.Entry(config_win, show="*")
-        old_private.pack(pady=2)
-        ttk.Label(config_win, text="Nueva clave pública:").pack(pady=2)
-        new_public = ttk.Entry(config_win, show="*")
-        new_public.pack(pady=2)
-        ttk.Label(config_win, text="Confirmar nueva clave pública:").pack(pady=2)
-        confirm_public = ttk.Entry(config_win, show="*")
-        confirm_public.pack(pady=2)
-        ttk.Label(config_win, text="Nueva clave privada:").pack(pady=2)
-        new_private = ttk.Entry(config_win, show="*")
-        new_private.pack(pady=2)
-        ttk.Label(config_win, text="Confirmar nueva clave privada:").pack(pady=2)
-        confirm_private = ttk.Entry(config_win, show="*")
-        confirm_private.pack(pady=2)
+        ttk.Label(config_win, text="Opciones de configuración", font=("Arial", 14)).pack(pady=10)
+        
+        def close_config():
+            config_win.destroy()
 
-        def try_change_keys():
-            op = old_public.get()
-            opr = old_private.get()
-            np = new_public.get()
-            cp = confirm_public.get()
-            npr = new_private.get()
-            cpr = confirm_private.get()
-            if np != cp or npr != cpr:
-                messagebox.showerror("Error", "Las nuevas claves y sus confirmaciones no coinciden.")
-                return
-            ok, msg = self.security.change_keys(op, opr, np, npr)
-            if ok:
-                messagebox.showinfo("Éxito", msg)
-                config_win.destroy()
-            else:
-                messagebox.showerror("Error", msg)
-                config_win.destroy()
-                self.block_app()
+        def add_entry_with_eye(parent, label_text):
+            frame = ttk.Frame(parent)
+            frame.pack(pady=5)
+            ttk.Label(frame, text=label_text).pack(side="left")
+            entry = ttk.Entry(frame, show="*")
+            entry.pack(side="left", padx=5)
+            show = tk.BooleanVar(value=False)
+            def toggle():
+                if show.get():
+                    entry.config(show="*")
+                    eye_btn.config(text="👁️")
+                    show.set(False)
+                else:
+                    entry.config(show="")
+                    eye_btn.config(text="🙈")
+                    show.set(True)
+            eye_btn = ttk.Button(frame, text="👁️", width=2, command=toggle)
+            eye_btn.pack(side="left")
+            return entry
 
-        ttk.Button(config_win, text="Cambiar claves", command=try_change_keys).pack(pady=10)
+        def start_change_keys():
+            for widget in config_win.winfo_children():
+                widget.destroy()
+            # Paso 1: Clave pública actual
+            attempts_pub = [0]
+            ttk.Label(config_win, text="Paso 1: Ingrese la clave pública actual", font=("Arial", 12)).pack(pady=10)
+            pub_entry = add_entry_with_eye(config_win, "Clave pública:")
+            def next_pub():
+                pub = pub_entry.get()
+                if not self.security.validate_public_key(pub):
+                    attempts_pub[0] += 1
+                    if attempts_pub[0] >= 3:
+                        messagebox.showerror("Error", "3 intentos fallidos. Bloqueando la app.")
+                        config_win.destroy()
+                        self.block_app()
+                        return
+                    else:
+                        messagebox.showerror("Error", f"Clave pública incorrecta. Intento {attempts_pub[0]}/3")
+                        return
+                # Paso 2: Clave privada actual
+                for widget in config_win.winfo_children():
+                    widget.destroy()
+                attempts_priv = [0]
+                ttk.Label(config_win, text="Paso 2: Ingrese la clave privada actual", font=("Arial", 12)).pack(pady=10)
+                priv_entry = add_entry_with_eye(config_win, "Clave privada:")
+                def next_priv():
+                    priv = priv_entry.get()
+                    if not self.security.validate_private_key(priv):
+                        attempts_priv[0] += 1
+                        if attempts_priv[0] >= 3:
+                            messagebox.showerror("Error", "3 intentos fallidos. Bloqueando la app.")
+                            config_win.destroy()
+                            self.block_app()
+                            return
+                        else:
+                            messagebox.showerror("Error", f"Clave privada incorrecta. Intento {attempts_priv[0]}/3")
+                            return
+                    # Paso 3: Nueva clave pública
+                    for widget in config_win.winfo_children():
+                        widget.destroy()
+                    attempts_new_pub = [0]
+                    ttk.Label(config_win, text="Paso 3: Nueva clave pública", font=("Arial", 12)).pack(pady=10)
+                    new_pub_entry = add_entry_with_eye(config_win, "Nueva pública:")
+                    def next_new_pub():
+                        new_pub = new_pub_entry.get()
+                        if not new_pub:
+                            attempts_new_pub[0] += 1
+                            if attempts_new_pub[0] >= 3:
+                                messagebox.showerror("Error", "3 intentos fallidos. Bloqueando la app.")
+                                config_win.destroy()
+                                self.block_app()
+                                return
+                            else:
+                                messagebox.showerror("Error", f"La nueva clave pública no puede estar vacía. Intento {attempts_new_pub[0]}/3")
+                                return
+                        # Paso 4: Nueva clave privada
+                        for widget in config_win.winfo_children():
+                            widget.destroy()
+                        attempts_new_priv = [0]
+                        ttk.Label(config_win, text="Paso 4: Nueva clave privada", font=("Arial", 12)).pack(pady=10)
+                        new_priv_entry = add_entry_with_eye(config_win, "Nueva privada:")
+                        def finish_change():
+                            new_priv = new_priv_entry.get()
+                            if not new_priv:
+                                attempts_new_priv[0] += 1
+                                if attempts_new_priv[0] >= 3:
+                                    messagebox.showerror("Error", "3 intentos fallidos. Bloqueando la app.")
+                                    config_win.destroy()
+                                    self.block_app()
+                                    return
+                                else:
+                                    messagebox.showerror("Error", f"La nueva clave privada no puede estar vacía. Intento {attempts_new_priv[0]}/3")
+                                    return
+                            ok, msg = self.security.change_keys(pub, priv, new_pub, new_priv)
+                            if ok:
+                                messagebox.showinfo("Éxito", msg)
+                                config_win.destroy()
+                            else:
+                                messagebox.showerror("Error", msg)
+                                config_win.destroy()
+                                self.block_app()
+                        ttk.Button(config_win, text="Finalizar", command=finish_change).pack(pady=10)
+                    ttk.Button(config_win, text="Siguiente", command=next_new_pub).pack(pady=10)
+                ttk.Button(config_win, text="Siguiente", command=next_priv).pack(pady=10)
+            ttk.Button(config_win, text="Siguiente", command=next_pub).pack(pady=10)
+        
+        ttk.Button(config_win, text="Cambiar claves", command=start_change_keys).pack(pady=10)
+        ttk.Button(config_win, text="Salir", command=close_config).pack(pady=10)
 
     def block_app(self):
         self.blocked = True
@@ -312,31 +386,6 @@ class PasswordGeneratorGUI:
         self.timer_label = ttk.Label(self.block_window, text="", font=("Arial", 16))
         self.timer_label.pack(pady=10)
         self.update_block_timer()
-
-    def update_block_timer(self):
-        if not self.blocked_until:
-            return
-        remaining = int(self.blocked_until - time.time())
-        if remaining < 0:
-            remaining = 0
-        mins, secs = divmod(remaining, 60)
-        self.timer_label.config(text=f"Tiempo restante: {mins:02d}:{secs:02d}")
-        if remaining > 0:
-            self.root.after(1000, self.update_block_timer)
-        else:
-            self.unblock_app()
-
-    def _block_timer_thread(self):
-        while time.time() < self.blocked_until:
-            time.sleep(1)
-        self.root.after(0, self.unblock_app)
-
-    def unblock_app(self):
-        self.blocked = False
-        self.blocked_until = None
-        if self.block_window:
-            self.block_window.destroy()
-            self.block_window = None
 
     def update_block_timer(self):
         if not self.blocked_until:
