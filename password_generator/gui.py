@@ -240,9 +240,52 @@ class PasswordGeneratorGUI:
                 if not entry:
                     messagebox.showerror("Error", "No se encontró la entrada seleccionada.")
                     return
-                # Mostrar toda la info
-                info = f"Plataforma: {entry.platform}\nUsuario: {entry.username}\nContraseña: {entry.password}\nFecha de creación: {entry.date_created.strftime('%Y-%m-%d %H:%M')}\nÚltima modificación: {entry.last_modified.strftime('%Y-%m-%d %H:%M') if entry.last_modified else '-'}"
-                messagebox.showinfo("Detalles de la contraseña", info)
+                
+                # Crear ventana personalizada para mostrar la información
+                info_window = tk.Toplevel(self.root)
+                info_window.title("Detalles de la contraseña")
+                info_window.geometry("400x300")
+                info_window.grab_set()
+                
+                # Mostrar la información
+                info_text = f"Plataforma: {entry.platform}\nUsuario: {entry.username}\nContraseña: {entry.password}\nFecha de creación: {entry.date_created.strftime('%Y-%m-%d %H:%M')}\nÚltima modificación: {entry.last_modified.strftime('%Y-%m-%d %H:%M') if entry.last_modified else '-'}"
+                info_label = ttk.Label(info_window, text=info_text, justify="left", padding=10)
+                info_label.pack(pady=10)
+                
+                # Frame para los botones
+                button_frame = ttk.Frame(info_window)
+                button_frame.pack(pady=10)
+                
+                def copy_to_clipboard():
+                    # Pedir clave pública
+                    for intento in range(3):
+                        pub_key = simpledialog.askstring(
+                            "Clave Pública",
+                            "Introduce la clave pública para copiar la contraseña:",
+                            show="*",
+                            parent=info_window
+                        )
+                        if pub_key is None:
+                            return  # Usuario canceló
+                        if self.security.validate_public_key(pub_key):
+                            # Copiar al portapapeles
+                            self.root.clipboard_clear()
+                            self.root.clipboard_append(entry.password)
+                            messagebox.showinfo("Éxito", "Contraseña copiada al portapapeles", parent=info_window)
+                            return
+                        else:
+                            intentos_restantes = 2 - intento
+                            if intentos_restantes > 0:
+                                messagebox.showerror("Error", f"Clave pública incorrecta. Te quedan {intentos_restantes} intentos.", parent=info_window)
+                            else:
+                                messagebox.showerror("Error", "Clave pública incorrecta. Último intento.", parent=info_window)
+                    # Si llegamos aquí, es porque se agotaron los intentos
+                    self.block_app()
+                
+                # Botones
+                ttk.Button(button_frame, text="Copiar Contraseña", command=copy_to_clipboard).pack(side="left", padx=5)
+                ttk.Button(button_frame, text="Cerrar", command=info_window.destroy).pack(side="left", padx=5)
+                
                 return
             else:
                 intentos_restantes = 2 - intento

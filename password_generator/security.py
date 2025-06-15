@@ -1,6 +1,6 @@
 import json
 import os
-import hashlib
+import bcrypt
 
 SETTINGS_FILE = "settings.json"
 DEFAULT_PUBLIC_KEY = "iLoveCod3"
@@ -12,7 +12,13 @@ class SecurityManager:
         self._load_or_init_settings()
 
     def _hash(self, value):
-        return hashlib.sha256(value.encode()).hexdigest()
+        # Generar un salt aleatorio y hashear la contraseña
+        salt = bcrypt.gensalt()
+        return bcrypt.hashpw(value.encode(), salt).decode()
+
+    def _verify_hash(self, value, hashed):
+        # Verificar si la contraseña coincide con el hash
+        return bcrypt.checkpw(value.encode(), hashed.encode())
 
     def _load_or_init_settings(self):
         if not os.path.exists(self.settings_path):
@@ -30,10 +36,10 @@ class SecurityManager:
             json.dump(self.settings, f, indent=4)
 
     def validate_public_key(self, key):
-        return self._hash(key) == self.settings["public_key"]
+        return self._verify_hash(key, self.settings["public_key"])
 
     def validate_private_key(self, key):
-        return self._hash(key) == self.settings["private_key"]
+        return self._verify_hash(key, self.settings["private_key"])
 
     def change_keys(self, old_public, old_private, new_public, new_private):
         if not self.validate_public_key(old_public):
