@@ -11,26 +11,10 @@ class PasswordGeneratorGUI:
     def __init__(self, root):
         self.root = root
         self.security = SecurityManager()
-        self.root.withdraw()  # Oculta la ventana principal
         self.blocked = False
         self.blocked_until = None
         self.block_window = None
 
-        # Pedir clave pública al inicio
-        self.public_key_value = None
-        if not self.ask_public_key():
-            root.destroy()
-            return
-
-        # Inicializa el almacenamiento usando la clave pública como clave maestra
-        self.storage = PasswordStorage()
-        self.storage.initialize(self.public_key_value)
-
-        self.root.deiconify()  # Muestra la ventana principal
-        self.root.title("Gestor de Contraseñas")
-        self.root.geometry("600x700")
-        self.root.configure(bg='#f0f0f0')
-        
         # Variables para el generador de contraseñas
         self.length_var = tk.StringVar(value="15")
         self.special_chars = {
@@ -46,16 +30,127 @@ class PasswordGeneratorGUI:
         self.password_list = None
         self.search_var = tk.StringVar()
         
-        # Mostrar menú principal
-        self.show_main_menu()
+        # Mostrar formulario de clave pública en root
+        self.show_public_key_form()
+
+    def show_public_key_form(self):
+        self.clear_window()
+        self.root.title("Clave Pública")
+        self.root.geometry("450x220")
+        self.root.resizable(False, False)
         
+        main_frame = ttk.Frame(self.root, padding=20)
+        main_frame.pack(fill="both", expand=True)
+        
+        title_label = ttk.Label(main_frame, text="Introduce la clave pública:", font=("Arial", 13, "bold"))
+        title_label.pack(pady=(0, 10))
+        
+        key_var = tk.StringVar()
+        key_entry = ttk.Entry(main_frame, textvariable=key_var, show="*", width=35, font=("Arial", 12))
+        key_entry.pack(pady=5)
+        
+        show_key = tk.BooleanVar(value=False)
+        def toggle_visibility():
+            if show_key.get():
+                key_entry.config(show="")
+            else:
+                key_entry.config(show="*")
+        show_checkbox = ttk.Checkbutton(main_frame, text="Mostrar clave", variable=show_key, command=toggle_visibility)
+        show_checkbox.pack(pady=5)
+        
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(pady=10)
+        
+        def confirmar():
+            key = key_var.get()
+            if self.security.validate_public_key(key):
+                self.public_key_value = key
+                self.storage = PasswordStorage()
+                self.storage.initialize(self.public_key_value)
+                self.root.title("Gestor de Contraseñas")
+                self.root.geometry("600x700")
+                self.root.resizable(True, True)
+                self.root.configure(bg='#f0f0f0')
+                self.show_main_menu()
+            else:
+                messagebox.showerror("Error", "Clave pública incorrecta.")
+        def cancelar():
+            self.root.destroy()
+        confirm_btn = ttk.Button(button_frame, text="Confirmar", command=confirmar, width=15)
+        confirm_btn.pack(side="left", padx=10)
+        cancel_btn = ttk.Button(button_frame, text="Cancelar", command=cancelar, width=15)
+        cancel_btn.pack(side="left", padx=10)
+        key_entry.focus()
+        key_entry.bind("<Return>", lambda e: confirmar())
+        self.root.bind("<Escape>", lambda e: cancelar())
+
+    def create_key_input_window(self, title, message, parent=None):
+        """Crea una ventana personalizada para entrada de claves con checkbox de mostrar/ocultar"""
+        if parent is None:
+            parent = self.root
+
+        key_window = tk.Toplevel(parent)
+        key_window.title(title)
+        key_window.geometry("450x220")
+        key_window.resizable(False, False)
+        key_window.grab_set()
+        key_window.transient(parent)
+
+        # Centrar la ventana en la pantalla
+        key_window.update_idletasks()
+        x = (key_window.winfo_screenwidth() // 2) - (450 // 2)
+        y = (key_window.winfo_screenheight() // 2) - (220 // 2)
+        key_window.geometry(f"450x220+{x}+{y}")
+
+        # Frame principal
+        main_frame = ttk.Frame(key_window, padding=20)
+        main_frame.pack(fill="both", expand=True)
+
+        # Título
+        title_label = ttk.Label(main_frame, text=message, font=("Arial", 13, "bold"))
+        title_label.pack(pady=(0, 10))
+
+        # Entry para la clave
+        key_var = tk.StringVar()
+        key_entry = ttk.Entry(main_frame, textvariable=key_var, show="*", width=35, font=("Arial", 12))
+        key_entry.pack(pady=5)
+
+        # Checkbox para mostrar/ocultar
+        show_key = tk.BooleanVar(value=False)
+        def toggle_visibility():
+            if show_key.get():
+                key_entry.config(show="")
+            else:
+                key_entry.config(show="*")
+        show_checkbox = ttk.Checkbutton(main_frame, text="Mostrar clave", variable=show_key, command=toggle_visibility)
+        show_checkbox.pack(pady=5)
+
+        # Botones
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(pady=10)
+        key_result = [None]
+        def confirm_key():
+            key_result[0] = key_var.get()
+            key_window.destroy()
+        def cancel_key():
+            key_result[0] = None
+            key_window.destroy()
+        confirm_btn = ttk.Button(button_frame, text="Confirmar", command=confirm_key, width=15)
+        confirm_btn.pack(side="left", padx=10)
+        cancel_btn = ttk.Button(button_frame, text="Cancelar", command=cancel_key, width=15)
+        cancel_btn.pack(side="left", padx=10)
+
+        key_entry.focus()
+        key_entry.bind("<Return>", lambda e: confirm_key())
+        key_window.bind("<Escape>", lambda e: cancel_key())
+        key_window.wait_window()
+        return key_result[0]
+
     def ask_public_key(self):
         for _ in range(3):  # Permite 3 intentos
-            key = simpledialog.askstring(
-                "Clave Pública",
-                "Introduce la clave pública:",
-                show="*",
-                parent=self.root
+            key = self.create_key_input_window(
+                "Clave Pública", 
+                "Introduce la clave pública:"
             )
             if key is None:
                 return False  # Usuario canceló
@@ -172,11 +267,9 @@ class PasswordGeneratorGUI:
             
         # Pedir clave pública
         for intento_pub in range(3):
-            pub_key = simpledialog.askstring(
+            pub_key = self.create_key_input_window(
                 "Autenticación - Clave Pública",
-                "Introduce la clave pública para acceder a la revisión:",
-                show="*",
-                parent=self.root
+                "Introduce la clave pública para acceder a la revisión:"
             )
             if pub_key is None:
                 return False  # Usuario canceló
@@ -195,11 +288,9 @@ class PasswordGeneratorGUI:
             
         # Pedir clave privada
         for intento_priv in range(3):
-            priv_key = simpledialog.askstring(
+            priv_key = self.create_key_input_window(
                 "Autenticación - Clave Privada",
-                "Introduce la clave privada para acceder a la revisión:",
-                show="*",
-                parent=self.root
+                "Introduce la clave privada para acceder a la revisión:"
             )
             if priv_key is None:
                 return False  # Usuario canceló
@@ -521,11 +612,10 @@ class PasswordGeneratorGUI:
         def copy_to_clipboard():
             # Pedir clave pública para copiar
             for intento in range(3):
-                pub_key = simpledialog.askstring(
+                pub_key = self.create_key_input_window(
                     "Clave Pública",
                     "Introduce la clave pública para copiar la contraseña:",
-                    show="*",
-                    parent=info_window
+                    info_window
                 )
                 if pub_key is None:
                     return  # Usuario canceló
@@ -566,20 +656,16 @@ class PasswordGeneratorGUI:
             frame = ttk.Frame(parent)
             frame.pack(pady=5)
             ttk.Label(frame, text=label_text).pack(side="left")
-            entry = ttk.Entry(frame, show="*")
+            entry = ttk.Entry(frame, show="*", width=25)
             entry.pack(side="left", padx=5)
             show = tk.BooleanVar(value=False)
             def toggle():
                 if show.get():
-                    entry.config(show="*")
-                    eye_btn.config(text="👁️")
-                    show.set(False)
-                else:
                     entry.config(show="")
-                    eye_btn.config(text="🙈")
-                    show.set(True)
-            eye_btn = ttk.Button(frame, text="👁️", width=2, command=toggle)
-            eye_btn.pack(side="left")
+                else:
+                    entry.config(show="*")
+            show_checkbox = ttk.Checkbutton(frame, text="Mostrar", variable=show, command=toggle)
+            show_checkbox.pack(side="left")
             return entry
 
         def start_change_keys():
